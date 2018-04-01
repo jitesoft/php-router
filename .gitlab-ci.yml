@@ -1,0 +1,9 @@
+before_script:
+  - composer install --no-interaction --prefer-source
+
+Test:
+  stage: test
+  image: jitesoft/composer:7.2
+  script:
+    - vendor/bin/phpunit tests/
+    - vendor/bin/phpcs -p --report=summary --standard=style.xml src
