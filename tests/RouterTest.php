@@ -1,17 +1,16 @@
 <?php
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-  Kernel.php - Part of the php-router project.
+  RouterTest.php - Part of the php-router project.
 
   © - Jitesoft 2018
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-namespace Jitesoft\Router;
-use Jitesoft\Container\Container;
+namespace Jitesoft\Router\Tests;
 
 /**
- * Kernel
+ * RouterTest
  * @author Johannes Tegnér <johannes@jitesoft.com>
  * @version 1.0.0
  */
-class Kernel {
+class RouterTest {
 
 }
