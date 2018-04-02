@@ -5,6 +5,7 @@
   © - Jitesoft 2018
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 namespace Jitesoft\Router\Http\Middlewares;
+
 use Jitesoft\Router\Contracts\MiddlewareInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -16,10 +17,23 @@ use Psr\Http\Message\ResponseInterface;
  */
 class AnonymousMiddleware implements MiddlewareInterface {
 
+    protected $callable;
+
+    /**
+     * AnonymousMiddleware constructor.
+     * @param callable $callable
+     */
     public function __construct(callable $callable) {
+        $this->callable = $callable;
     }
 
+    /**
+     * @param RequestInterface $request
+     * @param callable $next
+     * @return ResponseInterface
+     */
     public function handle(RequestInterface $request, callable $next): ResponseInterface {
-        return $this->callable($request, $next);
+        return call_user_func($this->callable, $request, $next);
     }
+
 }

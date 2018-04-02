@@ -5,7 +5,9 @@
     "authors": [
         {
             "name": "Johannes",
-            "email": "johannes@jitesoft.com"
+            "email": "johannes@jitesoft.com",
+            "role": "Developer",
+            "homepage": "https://jite.eu"
         }
     ],
     "autoload": {
@@ -30,7 +32,9 @@
         "jitesoft/container": "4.0.*",
         "nesbot/carbon": "1.25.*",
         "zendframework/zend-diactoros": "1.7.*",
-        "nikic/fast-route": "1.3.*"
+        "nikic/fast-route": "1.3.*",
+        "mindplay/annotations": "^1.3",
+        "jitesoft/loggers": "^1.1"
     },
     "require-dev": {
         "phpunit/phpunit": "7.0.*",

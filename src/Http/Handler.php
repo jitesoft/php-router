@@ -12,7 +12,6 @@ use function is_string;
 use Jitesoft\Router\Contracts\MiddlewareInterface;
 use Jitesoft\Router\Contracts\RouteHandlerInterface;
 use Jitesoft\Router\Http\Middlewares\AnonymousMiddleware;
-use Jitesoft\Router\Kernel;
 
 /**
  * Handler
@@ -46,7 +45,7 @@ class Handler implements RouteHandlerInterface {
 
         foreach ($middlewares as $middleware) {
             if (is_string($middleware)) {
-                $this->middlewares[] = Kernel::middleware($middleware);
+                $this->middlewares[] = $middleware;
             } else if (is_callable($middleware)) {
                 $this->middlewares[] = new AnonymousMiddleware($middleware);
             }
@@ -90,7 +89,7 @@ class Handler implements RouteHandlerInterface {
     }
 
     /**
-     * Get invokation callable if one exist.
+     * Get invocation callable if one exist.
      *
      * @return callable|null
      */
