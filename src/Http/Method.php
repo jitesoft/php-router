@@ -66,9 +66,6 @@ final class Method {
 
     private function __construct() {
         // Not a instantiable class!
-
-
-
     }
 
 }

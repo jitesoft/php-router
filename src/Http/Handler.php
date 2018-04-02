@@ -105,4 +105,5 @@ class Handler implements RouteHandlerInterface {
     public function getPattern(): string {
         return $this->pattern;
     }
+
 }

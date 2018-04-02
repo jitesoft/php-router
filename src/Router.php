@@ -38,8 +38,9 @@ use Zend\Diactoros\ServerRequestFactory;
  *
  * The Router class takes care of storing and invoking different handlers and their middleWares.
  * It creates a new handler for each action and stores it in a p
- * roper structure to easily and quickly fetch the desired request route.
+ * proper structure to easily and quickly fetch the desired request route.
  *
+ * @codingStandardsIgnoreStart
  * @method Router get(string $pattern, string|callable $handler, array $middleWares = []) Creates a handler for http GET method.
  * @method Router head(string $pattern, string|callable $handler, array $middleWares = []) Creates a handler for http HEAD method.
  * @method Router post(string $pattern, string|callable $handler, array $middleWares = []) Creates a handler for http POST method.
@@ -49,12 +50,12 @@ use Zend\Diactoros\ServerRequestFactory;
  * @method Router options(string $pattern, string|callable $handler, array $middleWares = []) Creates a handler for http OPTIONS method.
  * @method Router trace(string $pattern, string|callable $handler, array $middleWares = []) Creates a handler for http TRACE method.
  * @method Router patch(string $pattern, string|callable $handler, array $middleWares = []) Creates a handler for http PATCH method.
+ * @codingStandardsIgnoreStop
  *
  * @see Method for information about the HTTP methods.
- *
- * @todo Implement route groups to stack multiple actions under one namespace.
  */
 class Router implements LoggerAwareInterface {
+    // @todo Implement route groups to stack multiple actions under one namespace.
 
     private $logger;
     private $container;
@@ -190,8 +191,8 @@ class Router implements LoggerAwareInterface {
         /** @var Handler $handler */
         $handler = $this->actions[strtolower($request->getMethod())][$id];
         if (!array_key_exists(strtolower($request->getMethod()), $this->actions)
-            || !array_key_exists($id, $this->actions[strtolower($request->getMethod())])) {
-
+            ||
+            !array_key_exists($id, $this->actions[strtolower($request->getMethod())])) {
             throw new HttpNotFoundException('Route not specified.');
         }
 
@@ -241,8 +242,7 @@ class Router implements LoggerAwareInterface {
         if (is_callable($action)) { // The callable should always be the handler.
             return $action($request);
         }
-        // The last part of the call chain is the actual controller/handling class.
-        // It should return a ResponseInterface object which will then be passed up the line and returned to the router.
+
         return $action->handle($request, function($request) use ($chain) {
             return $this->callChain($request, $chain);
         });

@@ -15,10 +15,12 @@ use Psr\Http\Message\ResponseInterface;
  * @version 1.0.0
  */
 interface MiddlewareInterface {
+
     /**
      * @param RequestInterface $request
      * @param callable $next
      * @return ResponseInterface
      */
     public function handle(RequestInterface $request, callable $next): ResponseInterface;
+
 }
