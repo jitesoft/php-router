@@ -6,9 +6,11 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 namespace Jitesoft\Router;
 
+use Exception;
 use FastRoute\Dispatcher;
 use FastRoute\RouteCollector;
 use Jitesoft\Container\Container;
+use Jitesoft\Container\Injector;
 use Jitesoft\Exceptions\Http\Client\HttpMethodNotAllowedException;
 use Jitesoft\Exceptions\Http\Client\HttpNotFoundException;
 use Jitesoft\Exceptions\Http\Server\HttpInternalServerErrorException;
@@ -26,6 +28,7 @@ use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use ReflectionClass;
+use ReflectionException;
 use Zend\Diactoros\ServerRequestFactory;
 
 /**
@@ -59,7 +62,7 @@ class Router implements LoggerAwareInterface {
     private $logger;
     /** @var ContainerInterface */
     private $container;
-    /** @var array|RouteHandlerInterface[] */
+    /** @var array|RouteHandlerInterface[][] */
     private $actions = [];
 
     private const LOG_TAG = 'Router';
@@ -184,7 +187,11 @@ class Router implements LoggerAwareInterface {
         if ($result[0] === Dispatcher::FOUND) {
             $id   = $result[1];
             $args = $result[2];
-            return $this->handleInvocation($request, $id, $args);
+            try {
+                return $this->handleInvocation($request, $id, $args);
+            } catch (ReflectionException $e) {
+                throw new HttpInternalServerErrorException('Failed to initialize handler.');
+            }
         }
 
         if ($result[0] === Dispatcher::NOT_FOUND) {
@@ -207,6 +214,7 @@ class Router implements LoggerAwareInterface {
      * @throws HttpNotFoundException
      * @throws ContainerExceptionInterface
      * @throws NotFoundExceptionInterface
+     * @throws ReflectionException
      */
     private function handleInvocation(RequestInterface $request, int $id, array $arguments): ResponseInterface {
         // Find the handler.
@@ -250,7 +258,14 @@ class Router implements LoggerAwareInterface {
             if ($this->container->has($handler->getClass())) {
                 $class  = $this->container->get($handler->getClass());
             } else {
-                $class = (new ReflectionClass($handler->getClass()))->newInstanceWithoutConstructor();
+                // Try resolve with the container resolver.
+                $resolver = new Injector($this->container);
+                try {
+                    $class = $resolver->create($handler->getClass());
+                } catch (Exception $ex) {
+                    $this->logger->notice('Failed to initialize class via injection. Creating without constructor.');
+                    $class = (new ReflectionClass($handler->getClass()))->newInstanceWithoutConstructor();
+                }
             }
 
             $method = $handler->getFunction();
