@@ -7,6 +7,7 @@
 namespace Jitesoft\Router;
 
 use function array_pop;
+use function array_reverse;
 use function array_values;
 use FastRoute\Dispatcher;
 use FastRoute\RouteCollector;
@@ -267,9 +268,9 @@ class Router implements LoggerAwareInterface {
             return $action($request);
         }
 
-        $action = array_pop($chain);
-        return $action->handle($request, function($request) use ($chain, $action) {
-            return $this->callChain($request, $chain, $action);
+        $action = array_pop($middlewares);
+        return $action->handle($request, function($request) use ($middlewares, $action) {
+            return $this->callChain($request, $middlewares, $action);
         });
     }
 
