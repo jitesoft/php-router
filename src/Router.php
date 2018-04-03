@@ -226,24 +226,23 @@ class Router implements LoggerAwareInterface {
 
         }, $handler->getMiddleWares());
 
-        // Create handler for the last action.
-        $actions[] = function(RequestInterface $request) use ($arguments, $handler) {
-            if ($handler->getCallback() !== null) {
-                $this->logger->debug('{tag}: Request handler was a callable.', ['tag' => self::LOG_TAG]);
-                return $handler->getCallback()($request, ...array_values($arguments));
-            }
+        $final = null;
+        if ($handler->getCallback() !== null) {
+            $this->logger->debug('{tag}: Request handler was a callable.', ['tag' => self::LOG_TAG]);
+            $final = $handler->getCallback(); //($request, ...array_values($arguments));
+        } else {
 
             $this->logger->debug('{tag}: Request handler was not a callable, fetching from container.', ['tag' => self::LOG_TAG]);
-            $class = $this->container->get($handler->getClass());
-            $this->logger->debug(
-                '{tag}: Class {exists}',
-                [
-                    'exists' => ($class === null ? 'Does not exist.' : 'exists'),
-                    'tag' => self::LOG_TAG
-                ]
-            );
-            return $class->{$handler->getMethod()}($request, ...array_values($arguments));
-        };
+            $class  = $this->container->get($handler->getClass());
+            $method = $handler->getFunction();
+            $this->logger->debug('{tag}: Class {exists}', [ 'exists' => ($class === null ? 'Does not exist.' : 'exists'), 'tag' => self::LOG_TAG ]);
+
+            $final = function ($request) use ($arguments, $class, $method) {
+                $class->{$method}($request, ...array_values($arguments));
+            };
+        }
+
+        $actions[] = $final;
 
         $this->logger->debug('{tag}: Total amount of actions: {actions}', [
             'actions' => count($actions),
