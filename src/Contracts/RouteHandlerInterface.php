@@ -10,6 +10,7 @@ namespace Jitesoft\Router\Contracts;
  * RouteHandlerInterface
  * @author Johannes Tegnér <johannes@jitesoft.com>
  * @version 1.0.0
+ * @internal
  */
 interface RouteHandlerInterface {
 
@@ -30,11 +31,11 @@ interface RouteHandlerInterface {
     public function getMethod(): string;
 
     /**
-     * Get a list of middlewares to invoke on call.
+     * Get a list of middle wares to invoke on call.
      *
      * @return array|MiddlewareInterface[]
      */
-    public function getMiddlewares(): array;
+    public function getMiddleWares(): array;
 
     /**
      * Get the class which will be invoked on call.

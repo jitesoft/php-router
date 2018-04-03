@@ -6,17 +6,19 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 namespace Jitesoft\Router\Http;
 
-use function explode;
-use function is_callable;
-use function is_string;
 use Jitesoft\Router\Contracts\MiddlewareInterface;
 use Jitesoft\Router\Contracts\RouteHandlerInterface;
 use Jitesoft\Router\Http\Middlewares\AnonymousMiddleware;
 
 /**
  * Handler
+ *
+ * The handler class is a structure to keep the data of a given route action.
+ * It keeps the pattern, method, callback and all the middleWares in it.
+ *
  * @author Johannes Tegnér <johannes@jitesoft.com>
  * @version 1.0.0
+ * @internal
  */
 class Handler implements RouteHandlerInterface {
 
@@ -24,7 +26,7 @@ class Handler implements RouteHandlerInterface {
     protected $callback;
     protected $function;
     protected $class;
-    protected $middlewares;
+    protected $middleWares;
     protected $pattern;
 
     /**
@@ -32,22 +34,22 @@ class Handler implements RouteHandlerInterface {
      * @param string $method
      * @param string $pattern
      * @param string|callable $callback ClassName@functionName
-     * @param array $middlewares
+     * @param array $middleWares
      */
-    public function __construct(string $method, string $pattern, $callback, array $middlewares = []) {
+    public function __construct(string $method, string $pattern, $callback, array $middleWares = []) {
         $this->method   = $method;
         $this->pattern  = $pattern;
         $this->callback = (is_string($callback) ? null : $callback);
         $this->class    = (is_string($callback) ? explode('@', $callback)[0] : null);
         $this->function = (is_string($callback) ? explode('@', $callback)[1] : null);
 
-        $this->middlewares = [];
+        $this->middleWares = [];
 
-        foreach ($middlewares as $middleware) {
-            if (is_string($middleware)) {
-                $this->middlewares[] = $middleware;
-            } else if (is_callable($middleware)) {
-                $this->middlewares[] = new AnonymousMiddleware($middleware);
+        foreach ($middleWares as $middleWare) {
+            if (is_string($middleWare)) {
+                $this->middleWares[] = $middleWare;
+            } else if (is_callable($middleWare)) {
+                $this->middleWares[] = new AnonymousMiddleware($middleWare);
             }
         }
     }
@@ -62,12 +64,12 @@ class Handler implements RouteHandlerInterface {
     }
 
     /**
-     * Get a list of middlewares to invoke on call.
+     * Get a list of middle wares to invoke on call.
      *
      * @return array|MiddlewareInterface[]
      */
-    public function getMiddlewares(): array {
-        return $this->middlewares;
+    public function getMiddleWares(): array {
+        return $this->middleWares;
     }
 
     /**

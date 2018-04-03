@@ -6,27 +6,24 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 namespace Jitesoft\Router;
 
-use function array_key_exists;
-use Exception;
 use FastRoute\Dispatcher;
 use FastRoute\RouteCollector;
-use function FastRoute\simpleDispatcher;
-use function is_callable;
 use Jitesoft\Container\Container;
 use Jitesoft\Exceptions\Http\Client\HttpMethodNotAllowedException;
 use Jitesoft\Exceptions\Http\Client\HttpNotFoundException;
 use Jitesoft\Exceptions\Http\Server\HttpInternalServerErrorException;
 use Jitesoft\Exceptions\Psr\Container\ContainerException;
-use Jitesoft\Log\FileLogger;
 use Jitesoft\Log\StdLogger;
 use Jitesoft\Router\Contracts\MiddlewareInterface;
 use Jitesoft\Router\Http\Handler;
 use Jitesoft\Router\Http\Method;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\ContainerInterface;
+use Psr\Container\NotFoundExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
-use function var_dump;
 use Zend\Diactoros\ServerRequestFactory;
 
 /**
@@ -58,23 +55,27 @@ class Router implements LoggerAwareInterface {
     // @todo Implement route groups to stack multiple actions under one namespace.
 
     private $logger;
+    /** @var ContainerInterface */
     private $container;
     private $actions = [];
 
     /**
      * Router constructor.
-     *
-     * @throws Exception
+     * @param ContainerInterface|null $container
+     * @throws ContainerExceptionInterface
      */
-    public function __construct() {
-        try {
-            $this->container = new Container();
-        } catch (ContainerException $e) {
-            $this->logger->error('Failed to create router, container was not possible to initialize.');
-            throw new Exception('Failed to create router.');
+    public function __construct(ContainerInterface $container = null) {
+        if ($container === null) {
+            $container = new Container();
         }
 
-        $this->logger = new StdLogger();
+        $this->container = $container;
+
+        if ($this->container->has(LoggerInterface::class)) {
+            $this->logger = $this->container->get(LoggerInterface::class);
+        } else {
+            $this->logger = new StdLogger();
+        }
     }
 
     public function __call($name, $arguments): self {
@@ -107,18 +108,16 @@ class Router implements LoggerAwareInterface {
      *
      * @param array|string[] $middleWares
      * @return Router
+     *
+     * @throws ContainerExceptionInterface
      */
     public function registerMiddleWares(array $middleWares = []): self {
         foreach ($middleWares as $mw) {
             if (!$this->container->has($mw)) {
-                try {
+                if ($this->container instanceof Container) {
                     $this->container->set($mw, $mw, true);
-                } catch (ContainerException $e) {
-                    $this->logger->error(
-                        'Failed to fetch middleware from the container even though it should exist.'
-                    );
-                    // This should not be possible.
-                    continue;
+                } else {
+                    throw new ContainerException('Unknown container type.');
                 }
             }
         }
@@ -129,6 +128,9 @@ class Router implements LoggerAwareInterface {
     /**
      * @param RequestInterface|null $request
      * @return ResponseInterface
+     *
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      * @throws HttpInternalServerErrorException
      * @throws HttpMethodNotAllowedException
      * @throws HttpNotFoundException
@@ -136,7 +138,7 @@ class Router implements LoggerAwareInterface {
     public function handle(RequestInterface $request = null): ResponseInterface {
         $request = $request ?? ServerRequestFactory::fromGlobals();
 
-        $dispatcher = simpleDispatcher(function (RouteCollector $routeCollector) use ($request) {
+        $dispatcher = \FastRoute\simpleDispatcher(function (RouteCollector $routeCollector) use ($request) {
             if (!array_key_exists(strtolower($request->getMethod()), $this->actions)) {
                 $this->logger->warning('No action with method {method} found.',
                     [
@@ -184,7 +186,10 @@ class Router implements LoggerAwareInterface {
      * @param int $id
      * @param array $arguments
      * @return ResponseInterface
+     *
      * @throws HttpNotFoundException
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
     private function handleInvocation(RequestInterface $request, int $id, array $arguments): ResponseInterface {
         // Find the handler.
@@ -207,13 +212,14 @@ class Router implements LoggerAwareInterface {
                 if ($this->container->has($middleware)) {
                     return $this->container->get($middleware);
                 }
+                $this->logger->error('Failed to fetch middleware.');
             }
 
             throw new HttpInternalServerErrorException(
                 'Failed to handle request. Middleware was not found available.'
             );
 
-        }, $handler->getMiddlewares());
+        }, $handler->getMiddleWares());
 
         // Create handler for the last action.
         $this->actions[] = function(RequestInterface $request) use ($arguments, $handler) {

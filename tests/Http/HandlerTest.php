@@ -28,7 +28,7 @@ class HandlerTest extends AbstractTestCase {
 
     public function testGetMiddleware() {
         $handler = new Handler(Method::POST, '', function() {}, []);
-        $this->assertEmpty($handler->getMiddlewares());
+        $this->assertEmpty($handler->getMiddleWares());
 
         $handler = new Handler(Method::POST, '', function() {}, [
             function($request, $next) {
@@ -39,8 +39,8 @@ class HandlerTest extends AbstractTestCase {
             }
         ]);
 
-        $this->assertCount(2, $handler->getMiddlewares());
-        $this->assertInstanceOf(MiddlewareInterface::class, $handler->getMiddlewares()[0]);
+        $this->assertCount(2, $handler->getMiddleWares());
+        $this->assertInstanceOf(MiddlewareInterface::class, $handler->getMiddleWares()[0]);
     }
 
     public function testGetClassAndFunction() {
