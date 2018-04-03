@@ -6,6 +6,8 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 namespace Jitesoft\Router;
 
+use function array_pop;
+use function array_values;
 use FastRoute\Dispatcher;
 use FastRoute\RouteCollector;
 use Jitesoft\Container\Container;
@@ -229,44 +231,45 @@ class Router implements LoggerAwareInterface {
         $final = null;
         if ($handler->getCallback() !== null) {
             $this->logger->debug('{tag}: Request handler was a callable.', ['tag' => self::LOG_TAG]);
-            $final = $handler->getCallback(); //($request, ...array_values($arguments));
+            $callback = $handler->getCallback();
+            $final    = function($request) use ($arguments, $callback) {
+                return $callback($request, ...array_values($arguments));
+            };
         } else {
-
             $this->logger->debug('{tag}: Request handler was not a callable, fetching from container.', ['tag' => self::LOG_TAG]);
             $class  = $this->container->get($handler->getClass());
             $method = $handler->getFunction();
             $this->logger->debug('{tag}: Class {exists}', [ 'exists' => ($class === null ? 'Does not exist.' : 'exists'), 'tag' => self::LOG_TAG ]);
 
             $final = function ($request) use ($arguments, $class, $method) {
-                $class->{$method}($request, ...array_values($arguments));
+                return $class->{$method}($request, ...array_values($arguments));
             };
         }
 
-        $actions[] = $final;
-
         $this->logger->debug('{tag}: Total amount of actions: {actions}', [
-            'actions' => count($actions),
+            'actions' => count($actions) + 1,
             'tag' => self::LOG_TAG
         ]);
-        $result = $this->callChain($request, $actions);
+        $result = $this->callChain($request, array_reverse($actions), $final);
         $this->logger->debug('{tag}: Call chain complete. Returning result.', ['tag' => self::LOG_TAG]);
         return $result;
     }
 
     /**
      * @param RequestInterface $request
-     * @param array $chain
+     * @param array $middlewares
+     * @param callable $action
      * @return ResponseInterface
      */
-    private function callChain(RequestInterface $request, array $chain): ResponseInterface {
+    private function callChain(RequestInterface $request, array $middlewares, callable $action): ResponseInterface {
         /** @var MiddlewareInterface $action */
-        $action = array_splice($chain, 0, 1)[0]; // Get the first in the chain and remove from list.
-        if (is_callable($action)) { // The callable should always be the handler.
+        if (count($middlewares) === 0) {
             return $action($request);
         }
 
-        return $action->handle($request, function($request) use ($chain) {
-            return $this->callChain($request, $chain);
+        $action = array_pop($chain);
+        return $action->handle($request, function($request) use ($chain, $action) {
+            return $this->callChain($request, $chain, $action);
         });
     }
 
