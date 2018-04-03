@@ -268,8 +268,8 @@ class Router implements LoggerAwareInterface {
             return $action($request);
         }
 
-        $action = array_pop($middlewares);
-        return $action->handle($request, function($request) use ($middlewares, $action) {
+        $mw = array_pop($middlewares);
+        return $mw->handle($request, function($request) use ($middlewares, $action) {
             return $this->callChain($request, $middlewares, $action);
         });
     }
