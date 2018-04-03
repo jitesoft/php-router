@@ -13,7 +13,6 @@ use Jitesoft\Exceptions\Http\Client\HttpMethodNotAllowedException;
 use Jitesoft\Exceptions\Http\Client\HttpNotFoundException;
 use Jitesoft\Exceptions\Http\Server\HttpInternalServerErrorException;
 use Jitesoft\Exceptions\Psr\Container\ContainerException;
-use Jitesoft\Log\StdLogger;
 use Jitesoft\Router\Contracts\MiddlewareInterface;
 use Jitesoft\Router\Http\Handler;
 use Jitesoft\Router\Http\Method;
@@ -24,6 +23,7 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Zend\Diactoros\ServerRequestFactory;
 
 /**
@@ -59,6 +59,8 @@ class Router implements LoggerAwareInterface {
     private $container;
     private $actions = [];
 
+    private const LOG_TAG = 'Router';
+
     /**
      * Router constructor.
      * @param ContainerInterface|null $container
@@ -74,7 +76,7 @@ class Router implements LoggerAwareInterface {
         if ($this->container->has(LoggerInterface::class)) {
             $this->logger = $this->container->get(LoggerInterface::class);
         } else {
-            $this->logger = new StdLogger();
+            $this->logger = new NullLogger();
         }
     }
 
@@ -142,7 +144,8 @@ class Router implements LoggerAwareInterface {
             if (!array_key_exists(strtolower($request->getMethod()), $this->actions)) {
                 $this->logger->warning('No action with method {method} found.',
                     [
-                        'method' => $request->getMethod()
+                        'method' => $request->getMethod(),
+                        'tag' => self::LOG_TAG
                     ]
                 );
                 throw new HttpNotFoundException();
@@ -156,12 +159,14 @@ class Router implements LoggerAwareInterface {
 
         $this->logger->debug('Request method: {method}. Target: {target}', [
             'method' => $request->getMethod(),
-            'target' => $request->getRequestTarget()
+            'target' => $request->getRequestTarget(),
+            'tag' => self::LOG_TAG
         ]);
 
         $result = $dispatcher->dispatch($request->getMethod(), $request->getRequestTarget());
         $this->logger->debug('Dispatch complete, result: {result}.', [
-            'result' => (['not found', 'found', 'method not allowed', 'unknown'])[$result[0]]
+            'result' => (['not found', 'found', 'method not allowed', 'unknown'])[$result[0]],
+            'tag' => self::LOG_TAG
         ]);
 
         if ($result[0] === Dispatcher::FOUND) {
@@ -203,16 +208,16 @@ class Router implements LoggerAwareInterface {
 
         $actions = array_map(function($middleware) {
             if ($middleware instanceof MiddlewareInterface) {
-                $this->logger->debug('Middleware was of MiddlewareInterface type.');
+                $this->logger->debug('{tag}: Middleware was of MiddlewareInterface type.', ['tag' => self::LOG_TAG]);
                 return $middleware;
             }
 
             if (is_string($middleware)) {
-                $this->logger->debug('Middleware was a string, fetching from container.');
+                $this->logger->debug('{tag}: Middleware was a string, fetching from container.', ['tag' => self::LOG_TAG]);
                 if ($this->container->has($middleware)) {
                     return $this->container->get($middleware);
                 }
-                $this->logger->error('Failed to fetch middleware.');
+                $this->logger->error('{tag}: Failed to fetch middleware.', ['tag' => self::LOG_TAG]);
             }
 
             throw new HttpInternalServerErrorException(
@@ -224,19 +229,28 @@ class Router implements LoggerAwareInterface {
         // Create handler for the last action.
         $actions[] = function(RequestInterface $request) use ($arguments, $handler) {
             if ($handler->getCallback() !== null) {
-                $this->logger->debug('Request handler was a callable.');
+                $this->logger->debug('{tag}: Request handler was a callable.', ['tag' => self::LOG_TAG]);
                 return $handler->getCallback()($request, ...array_values($arguments));
             }
 
-            $this->logger->debug('Request handler was not a callable, fetching from container.');
+            $this->logger->debug('{tag}: Request handler was not a callable, fetching from container.', ['tag' => self::LOG_TAG]);
             $class = $this->container->get($handler->getClass());
-            $this->logger->debug('Class {exists}', [ 'exists' => ($class === null ? 'Does not exist.' : 'exists') ]);
+            $this->logger->debug(
+                '{tag}: Class {exists}',
+                [
+                    'exists' => ($class === null ? 'Does not exist.' : 'exists'),
+                    'tag' => self::LOG_TAG
+                ]
+            );
             return $class->{$handler->getMethod()}($request, ...array_values($arguments));
         };
 
-        $this->logger->debug('Total amount of actions: {actions}', ['actions' => count($actions)]);
+        $this->logger->debug('{tag}: Total amount of actions: {actions}', [
+            'actions' => count($actions),
+            'tag' => self::LOG_TAG
+        ]);
         $result = $this->callChain($request, $actions);
-        $this->logger->debug('Call chain complete. Returning result.');
+        $this->logger->debug('{tag}: Call chain complete. Returning result.', ['tag' => self::LOG_TAG]);
         return $result;
     }
 
