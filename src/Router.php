@@ -201,7 +201,7 @@ class Router implements LoggerAwareInterface {
             throw new HttpNotFoundException('Route not specified.');
         }
 
-        $this->actions = array_map(function($middleware) {
+        $actions = array_map(function($middleware) {
             if ($middleware instanceof MiddlewareInterface) {
                 $this->logger->debug('Middleware was of MiddlewareInterface type.');
                 return $middleware;
@@ -222,18 +222,22 @@ class Router implements LoggerAwareInterface {
         }, $handler->getMiddleWares());
 
         // Create handler for the last action.
-        $this->actions[] = function(RequestInterface $request) use ($arguments, $handler) {
+        $actions[] = function(RequestInterface $request) use ($arguments, $handler) {
             if ($handler->getCallback() !== null) {
                 $this->logger->debug('Request handler was a callable.');
                 return $handler->getCallback()($request, ...array_values($arguments));
             }
 
-            $this->logger->debug('Request handler was not a callable.');
+            $this->logger->debug('Request handler was not a callable, fetching from container.');
             $class = $this->container->get($handler->getClass());
+            $this->logger->debug('Class {exists}', [ 'exists' => ($class === null ? 'Does not exist.' : 'exists') ]);
             return $class->{$handler->getMethod()}($request, ...array_values($arguments));
         };
 
-        return $this->callChain($request, $this->actions);
+        $this->logger->debug('Total amount of actions: {actions}', ['actions' => count($actions)]);
+        $result = $this->callChain($request, $actions);
+        $this->logger->debug('Call chain complete. Returning result.');
+        return $result;
     }
 
     /**
@@ -242,7 +246,6 @@ class Router implements LoggerAwareInterface {
      * @return ResponseInterface
      */
     private function callChain(RequestInterface $request, array $chain): ResponseInterface {
-
         /** @var MiddlewareInterface $action */
         $action = array_splice($chain, 0, 1)[0]; // Get the first in the chain and remove from list.
         if (is_callable($action)) { // The callable should always be the handler.
