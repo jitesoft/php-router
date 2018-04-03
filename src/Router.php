@@ -6,9 +6,6 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 namespace Jitesoft\Router;
 
-use function array_pop;
-use function array_reverse;
-use function array_values;
 use FastRoute\Dispatcher;
 use FastRoute\RouteCollector;
 use Jitesoft\Container\Container;
@@ -17,6 +14,7 @@ use Jitesoft\Exceptions\Http\Client\HttpNotFoundException;
 use Jitesoft\Exceptions\Http\Server\HttpInternalServerErrorException;
 use Jitesoft\Exceptions\Psr\Container\ContainerException;
 use Jitesoft\Router\Contracts\MiddlewareInterface;
+use Jitesoft\Router\Contracts\RouteHandlerInterface;
 use Jitesoft\Router\Http\Handler;
 use Jitesoft\Router\Http\Method;
 use Psr\Container\ContainerExceptionInterface;
@@ -27,6 +25,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use ReflectionClass;
 use Zend\Diactoros\ServerRequestFactory;
 
 /**
@@ -60,6 +59,7 @@ class Router implements LoggerAwareInterface {
     private $logger;
     /** @var ContainerInterface */
     private $container;
+    /** @var array|RouteHandlerInterface[] */
     private $actions = [];
 
     private const LOG_TAG = 'Router';
@@ -88,7 +88,24 @@ class Router implements LoggerAwareInterface {
     }
 
     /**
+     * Get the endpoints as an array.
+     */
+    public function getEndpoints() {
+        $out = [];
+        foreach ($this->actions as $method => $actions) {
+            foreach ($actions as $action) {
+                $out[] = [
+                    'endpoint' => $action->getPattern(),
+                    'method' => $method
+                ];
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Create a handler for a given http method.
+     * It's preferable to use one of the http-method calls instead of this one.
      *
      * @param string $method
      * @param string $pattern
@@ -144,19 +161,11 @@ class Router implements LoggerAwareInterface {
         $request = $request ?? ServerRequestFactory::fromGlobals();
 
         $dispatcher = \FastRoute\simpleDispatcher(function (RouteCollector $routeCollector) use ($request) {
-            if (!array_key_exists(strtolower($request->getMethod()), $this->actions)) {
-                $this->logger->warning('No action with method {method} found.',
-                    [
-                        'method' => $request->getMethod(),
-                        'tag' => self::LOG_TAG
-                    ]
-                );
-                throw new HttpNotFoundException();
-            }
-
             /** @var Handler $action */
-            foreach ($this->actions[strtolower($request->getMethod())] as $id => $action) {
-                $routeCollector->addRoute(strtoupper($request->getMethod()), $action->getPattern(), $id);
+            foreach ($this->actions as $method => $actions) {
+                foreach ($actions as $id => $action) {
+                    $routeCollector->addRoute(strtoupper($method), $action->getPattern(), $id);
+                }
             }
         });
 
@@ -238,7 +247,12 @@ class Router implements LoggerAwareInterface {
             };
         } else {
             $this->logger->debug('{tag}: Request handler was not a callable, fetching from container.', ['tag' => self::LOG_TAG]);
-            $class  = $this->container->get($handler->getClass());
+            if ($this->container->has($handler->getClass())) {
+                $class  = $this->container->get($handler->getClass());
+            } else {
+                $class = (new ReflectionClass($handler->getClass()))->newInstanceWithoutConstructor();
+            }
+
             $method = $handler->getFunction();
             $this->logger->debug('{tag}: Class {exists}', [ 'exists' => ($class === null ? 'Does not exist.' : 'exists'), 'tag' => self::LOG_TAG ]);
 
