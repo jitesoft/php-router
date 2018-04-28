@@ -14,9 +14,14 @@ use Jitesoft\Exceptions\Http\Client\HttpNotFoundException;
 use Jitesoft\Exceptions\Http\Server\HttpInternalServerErrorException;
 use Jitesoft\Exceptions\Psr\Container\ContainerException;
 use Jitesoft\Router\Contracts\MiddlewareInterface;
-use Jitesoft\Router\Contracts\RouteHandlerInterface;
-use Jitesoft\Router\Http\Handler;
+use Jitesoft\Router\Contracts\RouteActionInterface;
+use Jitesoft\Router\Contracts\RouteGroupInterface;
+use Jitesoft\Router\Http\Action;
+use Jitesoft\Router\Http\Group;
 use Jitesoft\Router\Http\Method;
+use Jitesoft\Utilities\DataStructures\Queues\LinkedQueue;
+use Jitesoft\Utilities\DataStructures\Stacks\LinkedStack;
+use Jitesoft\Utilities\DataStructures\Stacks\StackInterface;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
@@ -31,12 +36,12 @@ use Zend\Diactoros\ServerRequestFactory;
 /**
  * Router
  * @author Johannes Tegnér <johannes@jitesoft.com>
- * @version 1.0.0
+ * @version 1.1.0
  *
  * Router class, handling the actual routing of the package.
  *
  * The Router class takes care of storing and invoking different handlers and their middleWares.
- * It creates a new handler for each action and stores it in a p
+ * It creates a new handler for each action and stores it in a
  * proper structure to easily and quickly fetch the desired request route.
  *
  * @codingStandardsIgnoreStart
@@ -59,8 +64,10 @@ class Router implements LoggerAwareInterface {
     private $logger;
     /** @var ContainerInterface */
     private $container;
-    /** @var array|RouteHandlerInterface[] */
+    /** @var array|RouteActionInterface[] */
     private $actions = [];
+    /** @var array|RouteGroupInterface[] */
+    private $groups = [];
 
     private const LOG_TAG = 'Router';
 
@@ -118,7 +125,13 @@ class Router implements LoggerAwareInterface {
             $this->actions[$method] = [];
         }
 
-        $this->actions[$method][] = new Handler($method, $pattern, $handler, $middleWares);
+        $this->actions[$method][] = new Action($method, $pattern, $handler, $middleWares);
+        return $this;
+    }
+
+    public function group(string $pattern, $middleWares = [], callable $closure): self {
+        $this->groups[$pattern] = new Group('', $pattern, $middleWares);
+        $closure($this->groups[$pattern]);
         return $this;
     }
 
@@ -156,12 +169,13 @@ class Router implements LoggerAwareInterface {
      * @throws HttpInternalServerErrorException
      * @throws HttpMethodNotAllowedException
      * @throws HttpNotFoundException
+     * @throws \ReflectionException
      */
     public function handle(RequestInterface $request = null): ResponseInterface {
         $request = $request ?? ServerRequestFactory::fromGlobals();
 
         $dispatcher = \FastRoute\simpleDispatcher(function (RouteCollector $routeCollector) use ($request) {
-            /** @var Handler $action */
+            /** @var Action $action */
             foreach ($this->actions as $method => $actions) {
                 foreach ($actions as $id => $action) {
                     $routeCollector->addRoute(strtoupper($method), $action->getPattern(), $id);
@@ -207,10 +221,11 @@ class Router implements LoggerAwareInterface {
      * @throws HttpNotFoundException
      * @throws ContainerExceptionInterface
      * @throws NotFoundExceptionInterface
+     * @throws \ReflectionException
      */
     private function handleInvocation(RequestInterface $request, int $id, array $arguments): ResponseInterface {
         // Find the handler.
-        /** @var Handler $handler */
+        /** @var Action $handler */
         $handler = $this->actions[strtolower($request->getMethod())][$id];
         if (!array_key_exists(strtolower($request->getMethod()), $this->actions)
             ||
@@ -218,25 +233,29 @@ class Router implements LoggerAwareInterface {
             throw new HttpNotFoundException('Route not specified.');
         }
 
-        $actions = array_map(function($middleware) {
-            if ($middleware instanceof MiddlewareInterface) {
-                $this->logger->debug('{tag}: Middleware was of MiddlewareInterface type.', ['tag' => self::LOG_TAG]);
-                return $middleware;
-            }
+        $actions = new LinkedStack();
 
-            if (is_string($middleware)) {
-                $this->logger->debug('{tag}: Middleware was a string, fetching from container.', ['tag' => self::LOG_TAG]);
-                if ($this->container->has($middleware)) {
-                    return $this->container->get($middleware);
+        if (count($handler->getMiddleWares()) > 0) {
+            $actions->push(...array_map(function ($middleware) {
+                if ($middleware instanceof MiddlewareInterface) {
+                    $this->logger->debug('{tag}: Middleware was of MiddlewareInterface type.', ['tag' => self::LOG_TAG]);
+                    return $middleware;
                 }
-                $this->logger->error('{tag}: Failed to fetch middleware.', ['tag' => self::LOG_TAG]);
-            }
 
-            throw new HttpInternalServerErrorException(
-                'Failed to handle request. Middleware was not found available.'
-            );
+                if (is_string($middleware)) {
+                    $this->logger->debug('{tag}: Middleware was a string, fetching from container.', ['tag' => self::LOG_TAG]);
+                    if ($this->container->has($middleware)) {
+                        return $this->container->get($middleware);
+                    }
+                    $this->logger->error('{tag}: Failed to fetch middleware.', ['tag' => self::LOG_TAG]);
+                }
 
-        }, $handler->getMiddleWares());
+                throw new HttpInternalServerErrorException(
+                    'Failed to handle request. Middleware was not found available.'
+                );
+
+            }, $handler->getMiddleWares()));
+        }
 
         $final = null;
         if ($handler->getCallback() !== null) {
@@ -265,24 +284,24 @@ class Router implements LoggerAwareInterface {
             'actions' => count($actions) + 1,
             'tag' => self::LOG_TAG
         ]);
-        $result = $this->callChain($request, array_reverse($actions), $final);
+        $result = $this->callChain($request, $actions, $final);
         $this->logger->debug('{tag}: Call chain complete. Returning result.', ['tag' => self::LOG_TAG]);
         return $result;
     }
 
     /**
      * @param RequestInterface $request
-     * @param array $middlewares
+     * @param StackInterface $middlewares
      * @param callable $action
      * @return ResponseInterface
      */
-    private function callChain(RequestInterface $request, array $middlewares, callable $action): ResponseInterface {
+    private function callChain(RequestInterface $request, StackInterface $middlewares, callable $action): ResponseInterface {
         /** @var MiddlewareInterface $action */
         if (count($middlewares) === 0) {
             return $action($request);
         }
 
-        $mw = array_pop($middlewares);
+        $mw = $middlewares->pop();
         return $mw->handle($request, function($request) use ($middlewares, $action) {
             return $this->callChain($request, $middlewares, $action);
         });

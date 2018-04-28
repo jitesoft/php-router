@@ -8,7 +8,7 @@ namespace Jitesoft\Router\Tests\Http;
 
 use function is_callable;
 use Jitesoft\Router\Contracts\MiddlewareInterface;
-use Jitesoft\Router\Http\Handler;
+use Jitesoft\Router\Http\Action;
 use Jitesoft\Router\Http\Method;
 use Jitesoft\Router\Tests\AbstractTestCase;
 
@@ -20,17 +20,17 @@ use Jitesoft\Router\Tests\AbstractTestCase;
 class HandlerTest extends AbstractTestCase {
 
     public function testGetMethod() {
-        $handler = new Handler(Method::GET, '', function() {}, []);
+        $handler = new Action(Method::GET, '', function() {}, []);
         $this->assertEquals('get', $handler->getMethod());
-        $handler = new Handler(Method::POST, '', function() {}, []);
+        $handler = new Action(Method::POST, '', function() {}, []);
         $this->assertEquals('post', $handler->getMethod());
     }
 
     public function testGetMiddleware() {
-        $handler = new Handler(Method::POST, '', function() {}, []);
+        $handler = new Action(Method::POST, '', function() {}, []);
         $this->assertEmpty($handler->getMiddleWares());
 
-        $handler = new Handler(Method::POST, '', function() {}, [
+        $handler = new Action(Method::POST, '', function() {}, [
             function($request, $next) {
                 return 'middleware';
             },
@@ -44,13 +44,13 @@ class HandlerTest extends AbstractTestCase {
     }
 
     public function testGetClassAndFunction() {
-        $handler = new Handler(Method::POST, '', 'Controller@action', []);
+        $handler = new Action(Method::POST, '', 'Controller@action', []);
         $this->assertEquals('Controller', $handler->getClass());
         $this->assertEquals('action', $handler->getFunction());
     }
 
     public function testGetCallback() {
-        $handler = new Handler(Method::POST, '', function () {
+        $handler = new Action(Method::POST, '', function () {
             return 'abc';
         });
 
@@ -58,7 +58,7 @@ class HandlerTest extends AbstractTestCase {
     }
 
     public function testGetPattern() {
-        $handler = new Handler(Method::POST, 'a/b/c/{d}', function() {}, []);
+        $handler = new Action(Method::POST, 'a/b/c/{d}', function() {}, []);
         $this->assertEquals('a/b/c/{d}', $handler->getPattern());
     }
 
